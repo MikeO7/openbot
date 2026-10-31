@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import Intents
 import UserNotifications
 
 /// Opens a notification that an OpenBot host sealed, before iOS shows it. The host sends the agent
@@ -43,6 +44,13 @@ final class NotificationService: UNNotificationServiceExtension {
       ]
       userInfo["body"] = data
       content.userInfo = userInfo
+      // The agent is the sender, with the picture that the app shows. Without a picture, or without
+      // the Communication Notifications entitlement, iOS shows the notification as before.
+      if let communication = AgentSender.notification(content, from: notification) {
+        contentHandler(communication)
+        self.contentHandler = nil
+        return
+      }
     }
     contentHandler(content)
     self.contentHandler = nil
@@ -51,6 +59,65 @@ final class NotificationService: UNNotificationServiceExtension {
   override func serviceExtensionTimeWillExpire() {
     if let contentHandler, let bestAttempt { contentHandler(bestAttempt) }
     contentHandler = nil
+  }
+}
+
+/// Makes an agent notification a communication notification: iOS then shows the agent picture in
+/// place of the app icon, on the iPhone and on a paired Apple Watch. The app writes the pictures into
+/// the App Group (`notification-avatar-files.ts`), with an index from `serverId/agentId` to the file.
+enum AgentSender {
+  private static let folder = "notification-avatars"
+  private static let indexFile = "index.json"
+
+  static func notification(
+    _ content: UNMutableNotificationContent,
+    from notification: OpenedNotification
+  ) -> UNNotificationContent? {
+    guard let image = picture(serverId: notification.serverId, agentId: notification.agentId) else { return nil }
+    let id = "\(notification.serverId)/\(notification.agentId)"
+    let handle = INPersonHandle(value: id, type: .unknown)
+    let sender = INPerson(
+      personHandle: handle,
+      nameComponents: nil,
+      displayName: notification.title,
+      image: image,
+      contactIdentifier: nil,
+      customIdentifier: id
+    )
+    let intent = INSendMessageIntent(
+      recipients: nil,
+      outgoingMessageType: .outgoingMessageText,
+      content: notification.body,
+      speakableGroupName: nil,
+      conversationIdentifier: content.threadIdentifier,
+      serviceName: nil,
+      sender: sender,
+      attachments: nil
+    )
+    intent.setImage(image, forParameterNamed: \.sender)
+    let interaction = INInteraction(intent: intent, response: nil)
+    interaction.direction = .incoming
+    interaction.donate(completion: nil)
+    return try? content.updating(from: intent)
+  }
+
+  private static func picture(serverId: String, agentId: String) -> INImage? {
+    guard
+      let group = Bundle.main.object(forInfoDictionaryKey: "OpenBotAppGroup") as? String,
+      let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group)
+    else { return nil }
+    let directory = container.appendingPathComponent(folder, isDirectory: true)
+    guard
+      let data = try? Data(contentsOf: directory.appendingPathComponent(indexFile)),
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      json["version"] as? Int == 1,
+      let avatars = json["avatars"] as? [String: String],
+      let name = avatars["\(serverId)/\(agentId)"],
+      // The index names files in this folder only.
+      !name.contains("/"),
+      let image = try? Data(contentsOf: directory.appendingPathComponent(name))
+    else { return nil }
+    return INImage(imageData: image)
   }
 }
 

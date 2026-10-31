@@ -87,6 +87,7 @@ import { useMobileSession } from "@/features/auth/context/mobile-session-context
 import { decodeMobileBrowserTabs } from "@/features/browser/model/browser-tabs";
 import { MobileChannelStore } from "@/features/channels/model/channel-store";
 import { useLiveActivity } from "@/features/live-activity/use-live-activity";
+import { useNotificationAvatars } from "@/features/push-notifications/use-notification-avatars";
 import { usePushNotifications } from "@/features/push-notifications/use-push-notifications";
 import { useSyncedNotificationLevelsLoader } from "@/features/push-notifications/use-synced-notification-levels";
 import { QuickActionsSync } from "@/features/quick-actions/quick-actions-sync";
@@ -541,6 +542,8 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
     loadAgentAvatar,
     supportsPush: supportsLiveActivityPush,
   });
+  // Notifications show the agent that sent them, with the picture that the app shows.
+  useNotificationAvatars(agents, loadAgentAvatar);
   // An iPhone and an Android phone register through capabilities of their own.
   const supportsPushNotifications = useCallback(
     (serverId: string) =>

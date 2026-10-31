@@ -29,8 +29,22 @@ export interface PushNotificationsNative {
   writeKeys(servers: readonly { serverId: string; name: string; seal: string; tag: string }[]): void;
   /** Sign-out removes the keys, so a notification sent after it shows nothing of the workspace. */
   removeKeys(): void;
+  /**
+   * Writes the picture of each agent where the code that shows notifications reads it, so a
+   * notification shows the agent that sent it. An agent that is not in the list loses its picture.
+   * Only iOS has it: `expo-notifications` on Android takes the large icon from the app manifest.
+   */
+  writeAvatars?(avatars: readonly NotificationAvatar[]): void;
   /** Plays `sound` as a notification plays it. In silent mode the phone plays it as it plays a notification. */
   previewSound(sound: NotificationSound): Promise<void>;
+}
+
+/** The picture of one agent, as a PNG, JPEG or WebP data URL. `version` changes when the picture changes. */
+export interface NotificationAvatar {
+  serverId: string;
+  agentId: string;
+  version: string;
+  dataUrl: string;
 }
 
 /** What a notification names: its agent, and the server and thread of the event. */

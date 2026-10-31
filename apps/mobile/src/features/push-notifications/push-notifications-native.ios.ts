@@ -2,6 +2,7 @@ import { NOTIFICATION_SOUND_FILES } from "@openbot/contracts/notification-relay"
 import { File, Paths } from "expo-file-system";
 import * as Notifications from "expo-notifications";
 import type { NotificationPermission } from "@/features/settings/model/push-notifications";
+import { removeAvatarFiles, writeAvatarFiles } from "./notification-avatar-files";
 import { type PushNotificationsNative, SOUND_PREVIEW_KEY } from "./push-notifications-native.types";
 
 /** The App Group of the app and its extensions. `app.json` names the same group. */
@@ -45,6 +46,11 @@ export const pushNotificationsNative: PushNotificationsNative | null = {
     if (!directory) return;
     const file = new File(directory, KEYS_FILE);
     if (file.exists) file.delete();
+    removeAvatarFiles(directory);
+  },
+  writeAvatars(avatars) {
+    const directory = Paths.appleSharedContainers[APP_GROUP];
+    if (directory) writeAvatarFiles(directory, avatars);
   },
   async previewSound(sound) {
     // A local notification goes through the same iOS sound path as a real one, with the iOS sound too.
