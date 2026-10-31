@@ -1547,11 +1547,13 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
         const server = currentActiveServer();
         const serverId = server.id;
         if (hostOwnsHide(serverCapabilities.current.get(serverId), server.role)) {
-          // The host owns the hide. The pin stays a preference of this phone.
-          if (preferencesRef.current[serverId]?.pinned.includes(agentId))
+          // The host owns the hide. The pin and the main agent stay preferences of this phone.
+          const saved = preferencesRef.current[serverId];
+          if (saved?.pinned.includes(agentId) || saved?.mainAgent === agentId)
             updatePreferences(serverId, (current) => ({
               ...current,
               pinned: current.pinned.filter((id) => id !== agentId),
+              mainAgent: current.mainAgent === agentId ? undefined : current.mainAgent,
             }));
           if (!hostHiddenRef.current[serverId]?.includes(agentId)) changeHostHidden(serverId, agentId, true);
           return;
@@ -1560,6 +1562,7 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
           ...current,
           hidden: [...new Set([...current.hidden, agentId])],
           pinned: current.pinned.filter((id) => id !== agentId),
+          mainAgent: current.mainAgent === agentId ? undefined : current.mainAgent,
         }));
         mobileAnalytics.track("conversation_action", { action: "hide", result: saved ? "succeeded" : "failed" });
       },
@@ -1631,6 +1634,9 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
           pinnedWorkflows: (current.pinnedWorkflows ?? []).filter((id) => workflowIds.includes(id)),
         }));
       },
+      setMainAgent: (agentId) =>
+        updatePreferences(currentActiveServer().id, (current) => ({ ...current, mainAgent: agentId ?? undefined })) !==
+        null,
       toggleAgentPin: (agentId) => {
         const pinned = currentPinnedAgentIds();
         const serverId = currentActiveServer().id;
@@ -1702,6 +1708,10 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
     () => agents.filter((agent) => agent.serverId === activeServer.id && hiddenAgentIds.includes(agent.id)),
     [agents, activeServer.id, hiddenAgentIds],
   );
+  // A main agent that is hidden or gone from the server is no main agent, until the user picks one.
+  const savedMainAgent = preferences[activeServer.id]?.mainAgent;
+  const mainAgentId =
+    savedMainAgent !== undefined && activeAgents.some((agent) => agent.id === savedMainAgent) ? savedMainAgent : null;
   const state = useMemo<MobileWorkspaceState>(() => {
     /** An owner or admin of an online host that serves `capability`. The host checks the role again. */
     const administers = (serverId: string, capability: string) => {
@@ -1726,6 +1736,7 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
       activeAgents,
       hiddenAgents,
       pinnedAgentIds,
+      mainAgentId,
       pinnedChannelIds,
       pinnedWorkflowIds,
       hiddenChannelIds,
@@ -1802,6 +1813,7 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
     activeAgents,
     hiddenAgents,
     pinnedAgentIds,
+    mainAgentId,
     pinnedChannelIds,
     pinnedWorkflowIds,
     hiddenChannelIds,

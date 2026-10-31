@@ -9,6 +9,8 @@ const WorkspacePreferences = Schema.Struct({
   hiddenChannels: Schema.mutableKey(Schema.optional(Schema.mutable(Schema.Array(Schema.String)))),
   /** The workflows that the mobile drawer shows under Workflows. An older app keeps reading the file. */
   pinnedWorkflows: Schema.mutableKey(Schema.optional(Schema.mutable(Schema.Array(Schema.String)))),
+  /** The agent that the quick-start button of the mobile home opens. An older app keeps reading the file. */
+  mainAgent: Schema.mutableKey(Schema.optional(Schema.String)),
 });
 export type RemoteWorkspacePreferences = typeof WorkspacePreferences.Type;
 const StoredPreferences = Schema.Struct({ version: Schema.Literal(1), ...WorkspacePreferences.fields });
@@ -47,6 +49,7 @@ export function createWorkspacePreferences(
       ...(value.pinnedChannels ? { pinnedChannels: value.pinnedChannels } : {}),
       ...(value.hiddenChannels ? { hiddenChannels: value.hiddenChannels } : {}),
       ...(value.pinnedWorkflows ? { pinnedWorkflows: value.pinnedWorkflows } : {}),
+      ...(value.mainAgent ? { mainAgent: value.mainAgent } : {}),
     };
     cache.set(hostId, preferences);
     return preferences;

@@ -57,13 +57,14 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
-import { useCSSVariable } from "uniwind";
+import { useCSSVariable, useUniwind } from "uniwind";
 import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
 import { ChatNavigationGateContext } from "@/features/agents/components/chat-link-pressable";
 import { openChatFromPane, useChatListPane } from "@/features/agents/components/chat-list-pane-context";
 import { getBloubAvatarColor } from "@/features/agents/model/bloub-activity";
 import type { createChatNavigationGate } from "@/features/agents/model/chat-navigation-gate";
 import { reportMobileNotification } from "@/features/analytics/failure-reports";
+import { requestComposerFocus } from "@/features/chat/model/composer-requests";
 import { MobileSearchResults, SearchCaption } from "@/features/search/components/mobile-search-results";
 import { setHomeSearchOpener } from "@/features/search/model/home-search-request";
 import { useAppDrawerShown } from "@/features/servers/components/app-drawer-activity";
@@ -78,6 +79,7 @@ import {
 import { BlurSwap } from "@/shared/components/blur-swap";
 import { useBottomFieldMetrics } from "@/shared/components/bottom-field-metrics";
 import { ANDROID_BLUR, GLASS_CAPSULE_HEIGHT, GlassCapsule } from "@/shared/components/glass-capsule";
+import { type MenuAction, MenuView } from "@/shared/components/menu-view";
 import { SheetScrollEdgeEffect } from "@/shared/components/sheet-scroll-edge-effect";
 import { haptics } from "@/shared/lib/haptics";
 import { useReducedMotion, useTransitionMode } from "@/shared/lib/motion";
@@ -892,7 +894,136 @@ export function HomeSearchBar({
           </Animated.View>
         </HomeFieldCapsule>
       </Animated.View>
+      {/* The quick start shares the row with the field, so the field is shorter and they never
+          overlap. It leaves while the search shows, and the field grows into its place. */}
+      {search.mounted ? null : (
+        <Animated.View entering={enter} exiting={exit}>
+          <HomeQuickStart
+            search={search}
+            size={fieldHeight}
+            liquidGlass={liquidGlass}
+            fallbackBackground={fieldBackground}
+          />
+        </Animated.View>
+      )}
     </Animated.View>
+  );
+}
+
+const MAIN_AGENT_ACTION = "main-agent:";
+
+/**
+ * The quick-start button of home: one tap opens the main agent's chat with its message field
+ * focused. A long press offers a new thread with the agent and another main agent. With no main
+ * agent, a tap lists the agents, and the chosen one becomes the main agent and opens.
+ */
+function HomeQuickStart({
+  search,
+  size,
+  liquidGlass,
+  fallbackBackground,
+}: {
+  search: HomeSearch;
+  size: number;
+  liquidGlass: boolean;
+  fallbackBackground: unknown;
+}) {
+  const { t } = useText();
+  const { theme } = useUniwind();
+  const workspace = useMobileWorkspaceReader();
+  const agents = useMobileWorkspaceSelector(({ activeAgents }) => activeAgents);
+  const main = useMobileWorkspaceSelector(
+    ({ activeAgents, mainAgentId }) => activeAgents.find((agent) => agent.id === mainAgentId) ?? null,
+  );
+  const muted = useThemeColor("muted");
+  const gate = useContext(ChatNavigationGateContext);
+  const pane = useChatListPane();
+  if (agents.length === 0) return null;
+  const open = (agent: MobileAgent) => {
+    void haptics.selection();
+    requestComposerFocus({ serverId: agent.serverId, agentId: agent.id });
+    openSearchedChat(pane, gate, agent.id);
+  };
+  const newThread = (agent: MobileAgent) => search.chooseTarget(agent);
+  const choices: MenuAction[] = agents.map((agent) => ({
+    id: `${MAIN_AGENT_ACTION}${agent.id}`,
+    title: agent.name,
+    state: agent.id === main?.id ? "on" : "off",
+  }));
+  const thread: MenuAction | null =
+    main && search.canUseTasks
+      ? { id: "thread", title: t("mobile.search.mainAgent.newThread", { name: main.name }), image: "plus.bubble" }
+      : null;
+  const choose: MenuAction = {
+    id: "choose",
+    title: t("mobile.search.mainAgent.change"),
+    image: "star",
+    subactions: choices,
+  };
+  const actions: MenuAction[] = main ? (thread ? [thread, choose] : [choose]) : choices;
+  const onPressAction = (id: string) => {
+    if (id === "thread" && main) {
+      newThread(main);
+      return;
+    }
+    if (!id.startsWith(MAIN_AGENT_ACTION)) return;
+    const agent = agents.find((candidate) => candidate.id === id.slice(MAIN_AGENT_ACTION.length));
+    if (!agent || !workspace().setMainAgent(agent.id)) return;
+    // A first choice also opens the chat: the user pressed the button to talk to the agent.
+    if (!main) open(agent);
+    else void haptics.notification();
+  };
+  const label = main ? t("mobile.search.mainAgent.open", { name: main.name }) : t("mobile.search.mainAgent.choose");
+  return (
+    <MenuView
+      colorScheme={theme === "dark" ? "dark" : "light"}
+      // With a main agent a tap opens its chat and a long press opens the menu. Without one, a tap
+      // opens the list of agents.
+      shouldOpenOnLongPress={main !== null}
+      title={main ? undefined : t("mobile.search.mainAgent.choose")}
+      actions={actions}
+      onPressAction={({ nativeEvent }) => onPressAction(nativeEvent.event)}
+    >
+      <GlassCapsule liquidGlass={liquidGlass} fallbackBackground={fallbackBackground} width={size} height={size}>
+        {main ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={label}
+            accessibilityActions={
+              search.canUseTasks
+                ? [{ name: "thread", label: t("mobile.search.mainAgent.newThread", { name: main.name }) }]
+                : undefined
+            }
+            onAccessibilityAction={({ nativeEvent }) => {
+              if (nativeEvent.actionName === "thread") newThread(main);
+            }}
+            className="flex-1 items-center justify-center"
+            hitSlop={4}
+            style={({ pressed }) => ({ opacity: pressed ? 0.55 : 1 })}
+            onPress={() => open(main)}
+          >
+            <BloubAvatar
+              agentId={main.id}
+              serverId={main.serverId}
+              hue={main.avatarHue}
+              seed={main.avatarSeed}
+              size={size - 16}
+              animateIdle={false}
+            />
+          </Pressable>
+        ) : (
+          // The menu takes the tap, so the content has no touch handler of its own.
+          <View
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel={label}
+            className="flex-1 items-center justify-center"
+          >
+            <Plus color={String(muted)} size={22} strokeWidth={2.2} />
+          </View>
+        )}
+      </GlassCapsule>
+    </MenuView>
   );
 }
 

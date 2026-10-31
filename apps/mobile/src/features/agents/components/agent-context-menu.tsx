@@ -25,6 +25,7 @@ function useAgentMenuActions(agent: MobileAgent) {
   const canPin = useMobileWorkspaceSelector(({ pinnedAgentIds, pinnedChannelIds }) =>
     canToggleAgentPin([...pinnedAgentIds, ...pinnedChannelIds], agent.id),
   );
+  const isMain = useMobileWorkspaceSelector(({ mainAgentId }) => mainAgentId === agent.id);
   const isUnread = useAgentUnread(agent.id);
   const actionPending = useRef(false);
   const { t } = useText();
@@ -51,6 +52,11 @@ function useAgentMenuActions(agent: MobileAgent) {
   }
 
   const handlePin = () => toggleAgentPinAnimated(agent.id);
+  // The quick-start button of home opens the main agent. One agent of a server is the main agent.
+  const handleMain = () => {
+    const saved = workspace().setMainAgent(isMain ? null : agent.id);
+    void haptics.notification(saved ? "success" : "error");
+  };
 
   const handleCopyId = () => {
     void Clipboard.setStringAsync(agent.id).then(() => {
@@ -87,11 +93,13 @@ function useAgentMenuActions(agent: MobileAgent) {
   };
   return {
     isPinned,
+    isMain,
     isUnread,
     canPin,
     sectionMenu,
     handleRead,
     handlePin,
+    handleMain,
     handleHide,
     handleInfo,
     handleCopyId,
@@ -104,11 +112,13 @@ function useAgentContextMenu(agent: MobileAgent) {
   const { t } = useText();
   const {
     isPinned,
+    isMain,
     isUnread,
     canPin,
     sectionMenu,
     handleRead,
     handlePin,
+    handleMain,
     handleHide,
     handleInfo,
     handleCopyId,
@@ -122,6 +132,9 @@ function useAgentContextMenu(agent: MobileAgent) {
       </Link.MenuAction>
       <Link.MenuAction icon={isPinned ? "pin.slash" : "pin"} isOn={isPinned} onPress={handlePin} disabled={!canPin}>
         {t(isPinned ? "mobile.agent.pin.unpin" : "mobile.agent.pin.pin")}
+      </Link.MenuAction>
+      <Link.MenuAction icon={isMain ? "star.slash" : "star"} isOn={isMain} onPress={handleMain}>
+        {t(isMain ? "mobile.agent.main.unset" : "mobile.agent.main.set")}
       </Link.MenuAction>
       <Link.MenuAction icon="eye.slash" onPress={handleHide}>
         {t("mobile.agent.menu.hide")}
@@ -205,11 +218,13 @@ function OpenAgentMenu({
   }, []);
   const {
     isPinned,
+    isMain,
     isUnread,
     canPin,
     sectionMenu,
     handleRead,
     handlePin,
+    handleMain,
     handleHide,
     handleInfo,
     handleCopyId,
@@ -228,6 +243,11 @@ function OpenAgentMenu({
       image: isPinned ? "pin.slash" : "pin",
       attributes: { disabled: !canPin },
     },
+    {
+      id: "main",
+      title: t(isMain ? "mobile.agent.main.unset" : "mobile.agent.main.set"),
+      image: isMain ? "star.slash" : "star",
+    },
     { id: "hide", title: t("mobile.agent.menu.hide"), image: "eye.slash" },
     ...sectionMenu.androidActions,
     { id: "info", title: t("mobile.agent.menu.info"), image: "info.circle" },
@@ -245,6 +265,7 @@ function OpenAgentMenu({
   const handlers: Record<string, () => void> = {
     read: handleRead,
     pin: handlePin,
+    main: handleMain,
     hide: handleHide,
     info: handleInfo,
     copy: handleCopyId,

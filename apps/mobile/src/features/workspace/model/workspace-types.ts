@@ -275,6 +275,8 @@ export interface MobileWorkspaceContextValue {
   activeAgents: MobileAgent[];
   hiddenAgents: MobileAgent[];
   pinnedAgentIds: string[];
+  /** The agent that the quick-start button of home opens, on the active server. Saved on this device. */
+  mainAgentId: string | null;
   pinnedChannelIds: string[];
   hiddenChannelIds: string[];
   hideChannel: (channelId: string, serverId: string) => boolean;
@@ -714,6 +716,8 @@ export interface MobileWorkspaceContextValue {
   /** Marks every unread chat of the active server read. It rejects when a chat stays unread. */
   markAllRead: () => Promise<void>;
   toggleAgentPin: (agentId: string) => ToggleAgentPinResult;
+  /** Sets the main agent of the active server, or clears it with `null`. False when it was not saved. */
+  setMainAgent: (agentId: string | null) => boolean;
 }
 
 /**
@@ -759,6 +763,7 @@ type MobileWorkspaceStateKey =
   | "activeAgents"
   | "hiddenAgents"
   | "pinnedAgentIds"
+  | "mainAgentId"
   | "pinnedChannelIds"
   | "pinnedWorkflowIds"
   | "hiddenChannelIds"
