@@ -209,6 +209,7 @@ import { loadIngressQueueKey } from "./ingress-queue-key";
 import { InstanceTransferService } from "./instance-transfer-service";
 import { InterfaceSizeService } from "./interface-size-service";
 import { prepareToolRuntimeForTest } from "./ipc/mcp-server-handlers";
+import { LanSetupAnnouncer, lanSetupEnabled } from "./lan-setup-announcer";
 import { LanguageService } from "./language-service";
 import { localRoutineFeedDocument } from "./local-routine-calendar";
 import { type LocalServerChildEnvironment, startLocalServerChild } from "./local-server-child";
@@ -418,6 +419,8 @@ const TEARDOWN_ORDER = {
   hostedServerActivity: 15,
   serverMemory: 16,
   serverMode: 17,
+  // After the control socket: a sign-in through it ends the announcement first.
+  lanSetupAnnouncer: 17.5,
   computerUseHighlight: 18,
   computerUsePermissionHelp: 19,
   dynamicIsland: 20,
@@ -3164,6 +3167,25 @@ export async function createApplicationServices({
       await Effect.runPromise(serverStartRetry.stop());
       await Effect.runPromise(serverMode.close());
     });
+    if (lanSetupEnabled(process.env)) {
+      // Only a server with no account announces itself, so that an app on the network can offer setup.
+      const lanSetup = new LanSetupAnnouncer({
+        canBeSetUp: () => {
+          const status = centralAuth.getState().status;
+          return status === "signed_out" || status === "code_sent";
+        },
+        serverName: () => host.getStatus().serverName ?? null,
+        onInfo: (message) => logger.info(message),
+        onError: (message, error) => logger.warn(message, toLogValue(error)),
+      });
+      const reconcileLanSetup = () => void Effect.runPromise(lanSetup.reconcile());
+      centralAuth.on("changed", reconcileLanSetup);
+      reconcileLanSetup();
+      teardown.push(TEARDOWN_ORDER.lanSetupAnnouncer, "the local network announcement", async () => {
+        centralAuth.off("changed", reconcileLanSetup);
+        await Effect.runPromise(lanSetup.close());
+      });
+    }
   }
   performance.mark("openbot:services.updates");
   await runCauseEffect(hostUpdateCoordinator.tick());

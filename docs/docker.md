@@ -87,6 +87,14 @@ Use it only on a host where you trust the other programs and users. Do not use i
 [several instances on one host](#several-instances-on-one-host): their firewall works only on the
 `openbot` bridge network.
 
+### Local network announcement
+
+With host networking and `OPENBOT_LAN_SETUP=1`, a server that is not signed in announces itself on
+the local network with DNS-SD (mDNS), as `_openbot-setup._tcp`. The announcement has the server name,
+`version=1` and a random `setup` ID, and nothing that gives access. It ends when the server signs
+in. The apps do not use it yet (issue #4178); sign in with `openbot login`. The bridge network does
+not pass multicast, so without host networking the announcement does not leave the container.
+
 ## Tags
 
 | Tag | Image |
@@ -446,6 +454,7 @@ environment of OpenBot, so they can read these values.
 | `XAI_API_KEY`, `CURSOR_API_KEY`, `CLINE_API_KEY` | A provider API key. |
 | `OPENBOT_CODEX_PATH`, `OPENBOT_CLAUDE_PATH`, `OPENBOT_GROK_PATH`, `OPENBOT_OPENCODE_PATH`, `OPENBOT_CURSOR_PATH`, `OPENBOT_CLINE_PATH`, `OPENBOT_ANTIGRAVITY_PATH`, `OPENBOT_PI_PATH`, `OPENBOT_MUSE_PATH` | Another provider executable. Mount it read-only in the container. |
 | `OPENBOT_AUTH_API_URL` | Another account server, for example a [self-hosted account service](self-hosting.md). |
+| `OPENBOT_LAN_SETUP` | `1` announces a server that is not signed in on the local network. It needs host networking. See [Local network announcement](#local-network-announcement). |
 | `OPENBOT_DISPLAY_SIZE` | The size of the virtual display that computer use reads, as `WIDTHxHEIGHT` from 640x480 to 2576x2576. The default is 1280x800. A value that is not valid writes a warning in `docker logs`, and the container starts with 1280x800. See [Display size](self-hosted-server.md#display-size) for when to use 1920x1080. `docker/instances/compose.yaml` does not pass it, so an instance uses 1280x800. |
 
 ## Security
