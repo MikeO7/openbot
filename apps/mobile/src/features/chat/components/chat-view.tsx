@@ -1,5 +1,5 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
-import type { ConversationMessage } from "@openbot/contracts/ipc";
+import { agentProviderDescriptor, type ConversationMessage } from "@openbot/contracts/ipc";
 import { markdownPlainText } from "@openbot/contracts/markdown-preview-text";
 import { serializeSelectionInstruction } from "@openbot/contracts/selection-instruction";
 import { type CauseCode, classifyFailure, type FailureProperties } from "@openbot/telemetry";
@@ -72,6 +72,7 @@ import {
 import { type OutboxMessage, outboxChatKey, outboxChatMessage, outboxRowId, outboxTargetKey } from "../model/outbox";
 import type { OutboxDraft, OutboxStore } from "../model/outbox-store";
 import { queueReceiptMessages, queueRowsWithHeldEdit } from "../model/queue-edit-draft";
+import { queuedMessageLocks } from "../model/queued-message-view";
 import { retainConfirmedAttachments } from "../model/upload-chat-attachments";
 import { voiceAccent, voicePalette } from "../model/voice-palette";
 import { rememberImageDimensions } from "./attachment-preview";
@@ -366,6 +367,24 @@ export function ChatView({
     [queued, heldQueueEdit, queuePending],
   );
   usePublishedQueuedChat(queue?.chatId ?? `${target.serverId}:${target.id}`, queue ?? null, queuePending);
+  // The first queued message can be steered from above the composer, with the rules of the sheet:
+  // a running turn, a provider that steers natively, and no lock on the message.
+  const steerProvider = failureAgent?.provider;
+  const firstQueued = queued?.[0];
+  const firstLocks =
+    queue && firstQueued
+      ? queuedMessageLocks(firstQueued, { busy: queue.busy, online: queue.online, held: heldQueueEdit })
+      : null;
+  const steerFirst =
+    queue?.activeTurnId &&
+    firstQueued?.status === "queued" &&
+    firstLocks &&
+    !firstLocks.locked &&
+    !firstLocks.editedElsewhere &&
+    steerProvider !== undefined &&
+    agentProviderDescriptor(steerProvider).steer === "native"
+      ? () => queue.steer(firstQueued)
+      : undefined;
   // The thinking sheet reads the agent's conversation, so only an agent chat opens it.
   const turnLines = useTurnStepLines(target.serverId);
   const conversationMessages = conversation?.messages;
@@ -1142,6 +1161,7 @@ export function ChatView({
                   waiting={queue.waiting.length > 0}
                   liquidGlassAvailable={liquidGlassAvailable}
                   fallbackBackground={fieldBackground}
+                  onSteer={steerFirst}
                 />
               ) : null}
               {/* Mounted while it leaves, so its capsules can animate out. */}

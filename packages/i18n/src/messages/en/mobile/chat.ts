@@ -385,6 +385,7 @@ export const messages = defineMessages("mobile.chat", {
   "mobile.chat.queue.position": "Position {position} · {date}",
   "mobile.chat.queue.attachments": "Attachments",
   "mobile.chat.queue.steer": "Steer",
+  "mobile.chat.queue.steerFirstLabel": "Steer queued message 1",
   "mobile.chat.queue.moveFirst": "Move to first",
   "mobile.chat.queue.deleteTitle": "Delete queued message?",
   "mobile.chat.queue.deleteMessage": "The agent never receives it.",

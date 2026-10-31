@@ -3,6 +3,7 @@ import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
 import ChevronUp from "lucide-react-native/icons/chevron-up";
 import Clock from "lucide-react-native/icons/clock";
+import CornerDownRight from "lucide-react-native/icons/corner-down-right";
 import TriangleAlert from "lucide-react-native/icons/triangle-alert";
 import { memo } from "react";
 import { View, type ViewStyle } from "react-native";
@@ -20,6 +21,11 @@ interface ChatQueueButtonProps {
   waiting: boolean;
   liquidGlassAvailable: boolean;
   fallbackBackground: ViewStyle["backgroundColor"];
+  /**
+   * Steers the first queued message into the running turn, as Steer in the queue sheet does.
+   * Absent while no turn runs, when the provider cannot steer, or when that message is locked.
+   */
+  onSteer?: (() => Promise<boolean>) | undefined;
 }
 
 export const ChatQueueButton = memo(function ChatQueueButton({
@@ -29,6 +35,7 @@ export const ChatQueueButton = memo(function ChatQueueButton({
   waiting,
   liquidGlassAvailable,
   fallbackBackground,
+  onSteer,
 }: ChatQueueButtonProps) {
   const { t } = useText();
   const muted = useThemeColor("muted");
@@ -45,7 +52,7 @@ export const ChatQueueButton = memo(function ChatQueueButton({
       ? t("mobile.chat.queue.repliesTitle")
       : t("mobile.chat.queue.count", { count });
   return (
-    <View className="mb-2 items-center">
+    <View className="mb-2 flex-row items-center justify-center gap-2">
       <ChatGlassButton
         accessibilityLabel={
           failed
@@ -73,6 +80,25 @@ export const ChatQueueButton = memo(function ChatQueueButton({
         </Typography.Paragraph>
         <ChevronUp color={String(muted)} size={16} strokeWidth={2} />
       </ChatGlassButton>
+      {onSteer ? (
+        // One tap instead of the queue sheet and the actions sheet, as each queued row on desktop.
+        <ChatGlassButton
+          accessibilityLabel={t("mobile.chat.queue.steerFirstLabel")}
+          className="h-11 flex-row items-center gap-2 px-4"
+          fallbackBackground={fallbackBackground}
+          height={44}
+          liquidGlassAvailable={liquidGlassAvailable}
+          onPress={() => {
+            void haptics.selection();
+            void onSteer().then((done) => haptics.notification(done ? "success" : "error"));
+          }}
+        >
+          <CornerDownRight color={String(muted)} size={16} strokeWidth={2} />
+          <Typography.Paragraph type="body-sm" weight="semibold">
+            {t("mobile.chat.queue.steer")}
+          </Typography.Paragraph>
+        </ChatGlassButton>
+      ) : null}
     </View>
   );
 });
